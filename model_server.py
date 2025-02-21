@@ -28,7 +28,7 @@ def get_session_id() -> str:
         return "unknown"
 
 
-def print_time(text: str) -> None:
+def print_timestamp(text: str) -> None:
     print("\n###########################################\n",
           text,
           "\n",
@@ -38,7 +38,7 @@ def print_time(text: str) -> None:
           "\n###########################################\n",
           )
 
-print_time("Starting server...")
+print_timestamp("Starting server...")
 
 quantized_version = False
 
@@ -162,14 +162,14 @@ class StreamManager:
         self.server_wait = True
         
         self.past_session_id = 0
-        # print_time("Initiation started at: ")
+        print_timestamp("System Prompt Initiation started. (StreamManager)")
         self.sys_prompt_init(0)
-        # print_time("Initiation completed at: ")
+        print_timestamp("System Prompt Initiation completed. (StreamManager)")
         self.session_id += 1
         
         
     def start_conversation(self):
-        print_time("uid {self.uid}: starting conversation.")
+        print_timestamp(f"uid {self.uid}: Starting conversation. (StreamManager)")
         logger.info(f"uid {self.uid}: new conversation started.")
         self.conversation_started.set()
         self.stop_response = False
@@ -351,8 +351,8 @@ class StreamManager:
     
     
     def process_message(self, message: Dict[str, Any]):
-        # print_time(f"Processing message (StreamManager): {message}")
-        print_time(f"Processing message (StreamManager): ")
+        # print_timestamp(f"Processing message (StreamManager): {str(message)[:200]}")
+        # print_timestamp(f"Processing message (StreamManager): ")
         try:
             # Process content items
             audio_data = None
@@ -448,6 +448,7 @@ class StreamManager:
                     self.stream_started = False
                     if (time.time() - self.vad_time >= 0.6):
                         self.prefill(audio, image, True)
+                        print_timestamp(f"Streaming completed due to VAD check (StreamManager): {self.session_id}")
                         self.is_streaming_complete.set()
                         # self.ls_time = time.time()
                                 
@@ -457,8 +458,8 @@ class StreamManager:
         return
 
     def prefill(self, audio, image, is_end):
-        # print_time(f"Prefilling (StreamManager): {audio, image}")
-        print_time(f"Prefilling (StreamManager): ")
+        # print_timestamp(f"Prefilling (StreamManager): audio: {str(audio)[:200]}, image: {str(image)[:200]}")
+        # print_timestamp(f"Prefilling (StreamManager): ")
         if self.server_wait:   
             now = time.time()
             await_time = self.speaking_time_stamp - now + self.extra_wait_time
@@ -480,7 +481,8 @@ class StreamManager:
                     slice_nums = 6
                 else:
                     return True
-            print("Length of audio prefill: ", len(self.audio_prefill))
+            # print_timestamp(f"Message received from the Client. \n Processing message and prefilling. (StreamManager) \n Length of audio prefill: {len(self.audio_prefill)}")
+            print(f"Message received from the Client. Processing and prefilling. Length of audio prefill: {len(self.audio_prefill)}. Time is {datetime.now()}")
             if (len(self.audio_prefill) == (1000/self.audio_chunk)) or (is_end and len(self.audio_prefill)>0):
                 time_prefill = time.time()
                 input_audio_path = self.savedir + f"/input_audio_log/input_audio_{self.input_audio_id}.wav"
@@ -509,12 +511,14 @@ class StreamManager:
                     if cnts is not None:
                         msg = {"role":"user", "content": cnts}
                         msgs = [msg]
+                        print_timestamp(f"Start sending message to MiniCPMO (StreamManager) ")
                         res = self.minicpmo_model.streaming_prefill(
                             session_id=str(self.session_id),
                             msgs=msgs, 
                             tokenizer=self.minicpmo_tokenizer,
                             max_slice_nums=slice_nums,
                         )
+                        print_timestamp(f"Response from MiniCPMO (StreamManager)")
 
                 self.input_audio_id += 1
             return True
@@ -526,6 +530,7 @@ class StreamManager:
             raise
 
     def generate_end(self):
+        print_timestamp(f"Generation completed (StreamManager): {str(self.cnts)[:200]}")
         self.input_audio_id += 10
         self.output_audio_id += 10
         self.flag_decode = False
@@ -534,8 +539,8 @@ class StreamManager:
 
     async def generate(self):
         """ return audio bytes and response text (optional) """
-        # print_time(f"Generating (StreamManager): {self.cnts}")
-        print_time(f"Generating (StreamManager): ")
+        # print_timestamp(f"Generating (StreamManager): {self.cnts}")
+        print_timestamp(f"Generating (StreamManager): ")
         if self.stop_response:
             self.generate_end()
             return
@@ -592,6 +597,7 @@ class StreamManager:
                             temp_time1 = time.time()
                             print('text: ', text)
                             yield base64.b64encode(audio_stream).decode('utf-8'), text
+                            print_timestamp(f"Yielded audio bytes (StreamManager): {len(audio_stream)}")
                             self.speaking_time_stamp += self.cycle_wait_time
                     except Exception as e:
                         logger.error(f"Error happened during generation: {str(e)}")
@@ -675,6 +681,7 @@ async def stream(request: Request, uid: Optional[str] = Header(None)):
     try:
         # Parse JSON request
         data = await request.json()
+        # print_timestamp(f"Received data from client.")
 
         # Validate basic structure
         if not isinstance(data, dict) or "messages" not in data:
@@ -707,6 +714,7 @@ async def stream(request: Request, uid: Optional[str] = Header(None)):
 @app.websocket("/ws/api/v1/stream")
 async def websocket_stream(websocket: WebSocket,
                            uid: Optional[str] = Query(None)):
+    print_timestamp("WebSocket connection established")
     global stream_manager
 
     if not uid:
@@ -725,6 +733,7 @@ async def websocket_stream(websocket: WebSocket,
         while True:
            # Continuously listen for incoming messages from the client
            data = await websocket.receive_text()
+           print_timestamp("Received message from client: ", data)
 
            # Parse JSON request
            try:
@@ -824,6 +833,7 @@ async def generate_sse_response(request: Request, uid: Optional[str] = Header(No
 @app.post("/completions")
 @app.post("/api/v1/completions")
 async def completions(request: Request, uid: Optional[str] = Header(None)):
+    print_timestamp("Received completions request from client")
     global stream_manager
 
     if not uid:

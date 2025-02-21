@@ -83,7 +83,7 @@ logger = logging.getLogger(__name__)
 from datetime import datetime
 
 
-def print_time(text: str) -> None:
+def print_timestamp(text: str) -> None:
     print("\n###########################################\n",
           text,
           "\n",
@@ -106,7 +106,6 @@ class MiniCPMOPreTrainedModel(Qwen2PreTrainedModel):
 
 class MiniCPMO(MiniCPMOPreTrainedModel):
     def __init__(self, config):
-        print_time("Initializing MiniCPMO")
         super().__init__(config)
         self.llm = Qwen2ForCausalLM(config)
         self.llm.prepare_inputs_for_generation = types.MethodType(prepare_inputs_for_generation, self.llm)  # patch llm
@@ -142,9 +141,11 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         # for stream api
         self.reset_session()
 
+        print_timestamp("MiniCPMO initialized. (MiniCPMO)")
+
     def reset_session(self):
 
-        print_time("Resetting session (MiniCPMO)")
+        print_timestamp("Resetting session (MiniCPMO)")
 
         self.session_id = None
         self.new_user_msg = True
@@ -163,7 +164,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         1. try load form local 2. try load from huggingface
         """
 
-        print_time("Initializing TTS (MiniCPMO)")
+        print_timestamp("Initializing TTS ... (MiniCPMO)")
 
         from .processing_minicpmo import ChatTTSProcessor
 
@@ -319,6 +320,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         Returns:
                 embedding with vision, vision_hidden_states
         """
+        print_timestamp("Getting visual embeddings started. (MiniCPMO)")
 
         if "vision_hidden_states" not in data:
             dtype = self.llm.model.embed_tokens.weight.dtype
@@ -422,6 +424,8 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
 
                 elif self.training:
                     new_vllm_embedding[i] += cur_vs_hs[0].mean() * 0
+        
+        print_timestamp("Getting visual embeddings completed. (MiniCPMO)")
 
         return new_vllm_embedding, vision_hidden_states
 
@@ -577,6 +581,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         Returns:
             final embeddings with audio feature
         """
+        print_timestamp("Getting Omni embeddings started (MiniCPMO).")
         if stream_input:
             audio_embeddings = self.get_audio_embedding_streaming(data)
         else:
@@ -620,6 +625,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
                 # dummy audio_embeddings
                 input_embeddings = input_embeddings + audio_embeddings[0].mean() * 0
 
+        print_timestamp("Getting Omni embeddings completed (MiniCPMO).")
         return input_embeddings
 
     def forward(self, data, **kwargs):
@@ -699,7 +705,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         Returns:
 
         """
-        print_time("Getting system prompt (MiniCPMO)")
+        print_timestamp("Getting system prompt (MiniCPMO)")
         if ref_audio is not None:
             assert isinstance(ref_audio, np.ndarray), "ref_audio error"
         if mode == "omni":
@@ -786,7 +792,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         stream=False,
         **kwargs,
     ):
-        print_time("Generating (MiniCPMO)")
+        print_timestamp("Generating (MiniCPMO)")
 
         assert input_ids is not None
         assert len(input_ids) == len(pixel_values)
@@ -1064,7 +1070,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         Args:
             session_id: Note: new connection should use a new session_id
         """
-        print_time(f"Streaming Prefill (MiniCPMO): {session_id}")
+        print_timestamp(f"Streaming Prefilling started (MiniCPMO): {session_id}")
 
         assert session_id is not None
         if self.session_id is None or session_id != self.session_id:  # new session
@@ -1167,6 +1173,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
             return_dict=True,
         )
         self.llm_past_key_values = outputs["past_key_values"]
+        print_timestamp(f"Streaming Prefilling completed (MiniCPMO): {session_id}")
         return
 
     @torch.inference_mode()
@@ -1186,7 +1193,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         Args:
         """
 
-        print_time(f"Streaming Generate (MiniCPMO): {session_id}")
+        print_timestamp(f"Streaming Generating started (MiniCPMO): {session_id}")
 
         if sampling:
             generation_config = {
@@ -1225,17 +1232,23 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         attention_mask = torch.ones((1, cache_length + input_ids.shape[1]), dtype=torch.bool, device=self.device)
 
         generation_config["max_new_tokens"] = max_new_tokens
+        # print_timestamp(f"Streaming Generating LLM chunk started (MiniCPMO): {session_id}")  # Cannot add timestamp here, since llm_generate_chunk() will continue yielding results.
         streamer = self.llm_generate_chunk(input_ids, attention_mask, tokenizer, terminators, generation_config)
+        # print_timestamp(f"Streaming Generating LLM chunk completed (MiniCPMO): {session_id}, returned: {str(streamer)[:200]}")
 
         if generate_audio:
+            # print_timestamp(f"Streaming Audio Generation started (MiniCPMO): {session_id}")   # Cannot add timestamp here, since _generate_mel_spec_audio_streaming() will continue yielding results.
             result = self._generate_mel_spec_audio_streaming(
                 spk_bounds, streamer, output_chunk_size=25, enable_regenerate=enable_regenerate
             )
+            # print_timestamp(f"Streaming Audio Generation completed (MiniCPMO): {session_id}, returned: {str(result)[:200]}") 
             return result
         else:
+            # print_timestamp(f"Streaming Audio Generation completed (MiniCPMO): {session_id}, returned: {str(streamer)[:200]}")
             return streamer
 
     def llm_generate_chunk(self, input_ids, attention_mask, tokenizer, terminators, generation_config):
+        print_timestamp(f"Streaming Generating LLM chunk started (MiniCPMO): {self.session_id}")
         def check_uncompleted_token(ids):
             cur_text = tokenizer.decode(ids)
             end = len(ids)
@@ -1295,6 +1308,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
             if new_len >= max_new_tokens:
                 logger.debug(f"LLM generation {new_len} exceeds max_new_tokens({max_new_tokens}), break.")
                 break
+        print_timestamp(f"Streaming Generating LLM chunk completed (MiniCPMO): {self.session_id}")
 
     def prepare_tts_text(self, text):
         tts_tokens = self.tts_processor.text_tokenizer.encode(text, add_special_tokens=False)
@@ -1512,6 +1526,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         prev_seg_audio_ids=None,
         enable_regenerate=False,
     ):
+        print_timestamp(f"Streaming Audio Generation started (MiniCPMO): {self.session_id}")
         # get spk_embedding
         gen_text = ""
         tts_text = ""
@@ -1880,6 +1895,8 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
             )
             for res in result:
                 yield res
+
+        print_timestamp(f"Streaming Audio Generation completed (MiniCPMO): {self.session_id}")
 
     def decode_mel_to_audio(self, mel_spec, output_path=""):
         with torch.inference_mode():

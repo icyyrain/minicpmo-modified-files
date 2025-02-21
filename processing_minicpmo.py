@@ -33,6 +33,17 @@ from transformers.tokenization_utils_base import TextInput
 from transformers.utils import TensorType
 
 from .image_processing_minicpmv import MiniCPMOBatchFeature
+from datetime import datetime
+
+
+
+def print_timestamp(text: str) -> None:
+    print("\n###########################################\n",
+          text,
+          "\n",
+          datetime.now(),
+          "\n###########################################\n",
+          )
 
 
 class MiniCPMOProcessor(ProcessorMixin):
@@ -74,16 +85,20 @@ class MiniCPMOProcessor(ProcessorMixin):
         **kwargs,
     ) -> MiniCPMOBatchFeature:
         if images is not None:
+            print_timestamp("Converting images to features started. (MiniCPMOProcessor)")
             image_inputs = self.image_processor(
                 images, do_pad=do_pad, max_slice_nums=max_slice_nums, return_tensors=return_tensors
             )
+            print_timestamp("Converting images to features completed. (MiniCPMOProcessor)")
         else:
             image_inputs = None
 
         if audios is not None:
+            print_timestamp("Converting audio to features started. (MiniCPMOProcessor)")
             audio_features, audio_feature_lens, audio_phs = self.audio_feature_extract(
                 audios, audio_parts, chunk_input, sampling_rate
             )
+            print_timestamp("Converting audio to features completed. (MiniCPMOProcessor)")
         else:
             audio_features, audio_feature_lens, audio_phs = [], [], []
 
@@ -303,6 +318,7 @@ class MiniCPMOProcessor(ProcessorMixin):
         return_tensors=None,
         **kwargs,
     ):
+        print_timestamp("Converting Omni to inputs started. (MiniCPMOProcessor)")
         if images is None and audio_phs is None:
             model_inputs = self.tokenizer(
                 texts, return_tensors=return_tensors, truncation=truncation, max_length=max_length, **kwargs
@@ -382,6 +398,8 @@ class MiniCPMOProcessor(ProcessorMixin):
             "audio_bounds": audio_bounds_list,
             "spk_bounds": spk_bounds_list,
         }
+
+        print_timestamp("Converting Omni to inputs completed. (MiniCPMOProcessor)")
 
         return data
 
@@ -481,6 +499,7 @@ class ChatTTSProcessor:
     def __init__(self, text_tokenizer):
         self.audio_processor = MelSpectrogramFeatures()
         self.text_tokenizer = text_tokenizer
+        print_timestamp("ChatTTSProcessor initialized. (ChatTTSProcessor)")
 
     def __call__(self, text_list, audio_list):
         assert len(text_list) == len(audio_list)
