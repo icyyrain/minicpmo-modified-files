@@ -82,6 +82,20 @@ logger = logging.getLogger(__name__)
 
 from datetime import datetime
 
+def log_to_txt(log_path, custom_message=""):
+    # 获取当前时间戳
+    timestamp = datetime.now()
+    
+    # 拼接时间戳和自定义文字
+    log_message = f"[{timestamp}] {custom_message}\n\n\n"
+    
+    # 将日志写入文件
+    with open(log_path, 'a') as file:
+        file.write(log_message)
+
+
+log_folder_path = "C:\Projects\MiniCPM-o\custom_log"
+
 
 def print_timestamp(text: str) -> None:
     print("\n###########################################\n",
@@ -1146,11 +1160,15 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
         ).to(self.device)
 
         # 1. prepare input embeddings
+        log_to_txt(log_folder_path+"\get_vllm_embedding.txt", f"Getting visual embeddings started. {model_inputs}\n Audio features shape: {model_inputs['audio_features'].shape}")
         model_inputs["inputs_embeds"], _ = self.get_vllm_embedding(model_inputs)
+        log_to_txt(log_folder_path+"\get_vllm_embedding.txt", f"Getting visual embeddings completed. {model_inputs['inputs_embeds']}\n Inputs_embeds shape: {model_inputs['inputs_embeds'].shape}")
         # get audio embedding with audio_past_key_values
+        log_to_txt(log_folder_path+"\get_omni_embedding.txt", f"Getting audio embeddings started. {model_inputs}")
         inputs_embeds = self.get_omni_embedding(
             model_inputs, input_embeddings=model_inputs["inputs_embeds"], stream_input=True
         )
+        log_to_txt(log_folder_path+"\get_omni_embedding.txt", f"Getting audio embeddings completed. {inputs_embeds}\n Inputs_embeds shape: {inputs_embeds.shape}")
 
         if self.is_first:
             # clean audio_past_key_values after first prefill
@@ -1300,6 +1318,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
             if first_chunk:
                 res["hidden_states"] = outputs.hidden_states
                 first_chunk = False
+            log_to_txt(log_folder_path+"\streaming_generate.txt", f"LLM generating chunk yielded. {res}")
             yield res
 
             if eos:
@@ -1894,6 +1913,7 @@ class MiniCPMO(MiniCPMOPreTrainedModel):
                 enable_regenerate=enable_regenerate,
             )
             for res in result:
+                log_to_txt(log_folder_path+"\streaming_generate.txt", f"Generate mel spec audio streaming yielded: {res}")
                 yield res
 
         print_timestamp(f"Streaming Audio Generation completed (MiniCPMO): {self.session_id}")

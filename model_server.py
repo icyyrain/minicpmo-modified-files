@@ -28,6 +28,34 @@ def get_session_id() -> str:
         return "unknown"
 
 
+def clear_txt_files_in_folder(log_folder_path):
+    # 遍历文件夹中的所有文件
+    for filename in os.listdir(log_folder_path):
+        # 检查文件是否是 .txt 文件
+        if filename.endswith('.txt'):
+            file_path = os.path.join(log_folder_path, filename)
+            # 清空 .txt 文件内容
+            open(file_path, 'w').close()
+
+            
+def log_to_txt(log_path, custom_message=""):
+    # 获取当前时间戳
+    timestamp = datetime.now()
+    
+    # 拼接时间戳和自定义文字
+    log_message = f"[{timestamp}] {custom_message}\n\n\n"
+    
+    # 将日志写入文件
+    with open(log_path, 'a') as file:
+        file.write(log_message)
+
+
+log_folder_path = "C:\Projects\MiniCPM-o\custom_log"
+clear_txt_files_in_folder(log_folder_path)
+log_path_stream = log_folder_path + "\stream.txt"
+log_path_process_message = log_folder_path + "\process_message.txt"
+
+
 def print_timestamp(text: str) -> None:
     print("\n###########################################\n",
           text,
@@ -39,6 +67,7 @@ def print_timestamp(text: str) -> None:
           )
 
 print_timestamp("Starting server...")
+
 
 quantized_version = False
 
@@ -396,7 +425,9 @@ class StreamManager:
                         self.sys_prompt_init(2)
                     else:
                         self.sys_prompt_init(1)
-                    
+
+                log_to_txt(log_path_process_message, f"Base64 decoded audio bytes: {audio_bytes}")
+                log_to_txt(log_path_process_message, f"Base64 decoded image: {image}")
                 self.prefill(audio_bytes, image, False)
                 
                 self.vad_sequence.append(audio_bytes)
@@ -484,6 +515,8 @@ class StreamManager:
             # print_timestamp(f"Message received from the Client. \n Processing message and prefilling. (StreamManager) \n Length of audio prefill: {len(self.audio_prefill)}")
             print(f"Message received from the Client. Processing and prefilling. Length of audio prefill: {len(self.audio_prefill)}. Time is {datetime.now()}")
             if (len(self.audio_prefill) == (1000/self.audio_chunk)) or (is_end and len(self.audio_prefill)>0):
+                log_to_txt(log_folder_path+"\prefill.txt", f"Audio prefill list: {self.audio_prefill}")
+                log_to_txt(log_folder_path+"\prefill.txt", f"Image prefill list: {self.image_prefill}")
                 time_prefill = time.time()
                 input_audio_path = self.savedir + f"/input_audio_log/input_audio_{self.input_audio_id}.wav"
                 self.merge_wav_files(self.audio_prefill, input_audio_path)
@@ -512,6 +545,7 @@ class StreamManager:
                         msg = {"role":"user", "content": cnts}
                         msgs = [msg]
                         print_timestamp(f"Start sending message to MiniCPMO (StreamManager) ")
+                        log_to_txt(log_folder_path+"\prefill.txt", f"Start sending message to MiniCPMO: {msgs}")
                         res = self.minicpmo_model.streaming_prefill(
                             session_id=str(self.session_id),
                             msgs=msgs, 
@@ -558,7 +592,9 @@ class StreamManager:
                         audio_stream = wav_file.read()
                 except FileNotFoundError:
                     print(f"File {input_audio_path} not found.")
-                yield base64.b64encode(audio_stream).decode('utf-8'), "assistant:\n"
+                output = base64.b64encode(audio_stream).decode('utf-8'), "assistant:\n"
+                # log_to_txt(log_folder_path+"\generate.txt", f"Generate yielded to client. {output}")
+                yield output
                 
                 print('=== gen start: ', time.time() - time_gen)
                 first_time = True
@@ -583,6 +619,7 @@ class StreamManager:
                             if self.stop_response:
                                 self.generate_end()
                                 return
+                            log_to_txt(log_folder_path+"\generate.txt", f"Generated content: {r} Audio tensor shape: {r['audio_wav'].shape}")
                             audio_np, sr, text = r["audio_wav"], r["sampling_rate"], r["text"]
 
                             output_audio_path = self.savedir + f'/output_audio_log/output_audio_{self.output_audio_id}.wav'
@@ -596,7 +633,9 @@ class StreamManager:
                                 print(f"File {output_audio_path} not found.")
                             temp_time1 = time.time()
                             print('text: ', text)
-                            yield base64.b64encode(audio_stream).decode('utf-8'), text
+                            output = base64.b64encode(audio_stream).decode('utf-8'), text
+                            log_to_txt(log_folder_path+"\generate.txt", f"Generated audio yielded to client. {output}")
+                            yield output
                             print_timestamp(f"Yielded audio bytes (StreamManager): {len(audio_stream)}")
                             self.speaking_time_stamp += self.cycle_wait_time
                     except Exception as e:
@@ -692,6 +731,7 @@ async def stream(request: Request, uid: Optional[str] = Header(None)):
         for message in data["messages"]:
             if not isinstance(message, dict) or "role" not in message or "content" not in message:
                 raise HTTPException(status_code=400, detail="Invalid message format")
+            log_to_txt(log_path_stream, f"Received message from client: {message}")
             reason = stream_manager.process_message(message)
 
         # Return response using uid from header
@@ -919,9 +959,9 @@ async def feedback(request: Request, uid: Optional[str] = Header(None)):
             raise HTTPException(status_code=400, detail=f"Invalid rating value: {rating}")
 
         # Define the log file path
-        log_file_path = f"{stream_manager.savedir}/feedback_log/{response_id}.{rating}"
+        log_log_path = f"{stream_manager.savedir}/feedback_log/{response_id}.{rating}"
         # Write the feedback to the file asynchronously
-        async with aiofiles.open(log_file_path, mode="a") as file:
+        async with aiofiles.open(log_log_path, mode="a") as file:
             await file.write(f"model: {stream_manager.minicpmo_model_path}\nuid {uid}: {comment}\n")
         response = {
             "id": uid,

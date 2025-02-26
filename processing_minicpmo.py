@@ -36,6 +36,20 @@ from .image_processing_minicpmv import MiniCPMOBatchFeature
 from datetime import datetime
 
 
+def log_to_txt(log_path, custom_message=""):
+    # 获取当前时间戳
+    timestamp = datetime.now()
+    
+    # 拼接时间戳和自定义文字
+    log_message = f"[{timestamp}] {custom_message}\n\n\n"
+    
+    # 将日志写入文件
+    with open(log_path, 'a') as file:
+        file.write(log_message)
+
+
+log_folder_path = "C:\Projects\MiniCPM-o\custom_log"
+
 
 def print_timestamp(text: str) -> None:
     print("\n###########################################\n",
@@ -86,19 +100,23 @@ class MiniCPMOProcessor(ProcessorMixin):
     ) -> MiniCPMOBatchFeature:
         if images is not None:
             print_timestamp("Converting images to features started. (MiniCPMOProcessor)")
+            log_to_txt(f"{log_folder_path}/image_processor.txt", f"Converting images to features started. {images} Data Type: {type(images)}")
             image_inputs = self.image_processor(
                 images, do_pad=do_pad, max_slice_nums=max_slice_nums, return_tensors=return_tensors
             )
             print_timestamp("Converting images to features completed. (MiniCPMOProcessor)")
+            log_to_txt(f"{log_folder_path}/image_processor.txt", f"Converting images to features completed. {image_inputs} Data Type: {type(image_inputs)}\n Shape: {np.array(image_inputs['pixel_values']).shape}")
         else:
             image_inputs = None
 
         if audios is not None:
             print_timestamp("Converting audio to features started. (MiniCPMOProcessor)")
+            log_to_txt(f"{log_folder_path}/audio_feature_extract.txt", f"Converting audio to features started. {audios} Data Type: {type(audios)}")
             audio_features, audio_feature_lens, audio_phs = self.audio_feature_extract(
                 audios, audio_parts, chunk_input, sampling_rate
             )
             print_timestamp("Converting audio to features completed. (MiniCPMOProcessor)")
+            log_to_txt(f"{log_folder_path}/audio_feature_extract.txt", f"Converting audio to features completed. {audio_features} Data Type: {type(audio_features)} Shape: {audio_features.shape}")
         else:
             audio_features, audio_feature_lens, audio_phs = [], [], []
 

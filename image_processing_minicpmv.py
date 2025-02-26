@@ -42,6 +42,21 @@ from transformers.utils import TensorType
 from datetime import datetime
 
 
+def log_to_txt(log_path, custom_message=""):
+    # 获取当前时间戳
+    timestamp = datetime.now()
+    
+    # 拼接时间戳和自定义文字
+    log_message = f"[{timestamp}] {custom_message}\n\n\n"
+    
+    # 将日志写入文件
+    with open(log_path, 'a') as file:
+        file.write(log_message)
+
+
+log_folder_path = "C:\Projects\MiniCPM-o\custom_log"
+
+
 def print_timestamp(text: str) -> None:
     print("\n###########################################\n",
           text,
